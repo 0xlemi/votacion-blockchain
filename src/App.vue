@@ -124,6 +124,13 @@
 </template>
 
 <script>
+// Importar librerias
+import { default as Web3 } from 'web3';
+import { default as contract } from 'truffle-contract';
+
+import contracto_votacion from '../build/contracts/Votacion.json';
+
+
 export default {
     name: 'app',
     data() {
@@ -164,6 +171,90 @@ export default {
                 { informacion: 'Total Dinero Recolectado', valor: null }
             ],
         }
+    },
+    methods: {
+        agregarCandidatos() {
+            let vue = this;
+            this.votacion.deployed().then(function(contractInstance) {
+                let contrato = contractInstance;
+                /* Llamamos la funcion todosLosCandidatos que nos regresa un array
+                 * con los nombres de los candidatos.
+                 */
+                contrato.todosLosCandidatos.call().then(function(candidateArray) {
+                    for(let i=0; i < candidateArray.length; i++){
+                        /* Los nombres de los candidatos estan en bytes32 en el blockchain.
+                         * Lo tenemos que convertir a string para poderlo utilizar
+                         * Para esto usamos la funcion toUtf8
+                         */
+                        let nombre = web3.toUtf8(candidateArray[i]);
+                        vue.candidatos[i].nombre = nombre;
+                        vue.detallesCandidatos[i].nombre = nombre;
+                        /* Llamar la funcion totalVotosPor para tambien
+                         * guardar la cantidad de votos
+                         */
+                        contrato.totalVotosPor.call(i).then(function(votos) {
+                            vue.candidatos[i].votos = votos;
+                        });
+
+                        // Tambien llenar le select de candidatos
+                        vue.seleccionCandidatos[i+1].text = nombre;
+                        vue.seleccionCandidatos[i+1].value = i;
+                    }
+                });
+            });
+        },
+        agregarInfoTokens(){
+            let vue = this;
+            this.votacion.deployed().then(function(contractInstance){
+                contractInstance.totalDeVotos.call().then(function(v) {
+                    vue.tokens[0].valor = v.toString();
+                });
+                contractInstance.votosRestantes.call().then(function(v) {
+                    vue.tokens[1].valor = v.toString();
+                });
+                contractInstance.votosVendidos.call().then(function(v) {
+                    vue.tokens[2].valor = v.toString();
+                });
+                contractInstance.precioToken.call().then(function(v) {
+                    vue.precioPorVoto = parseFloat(web3.fromWei(v.toString()));
+                    vue.tokens[3].valor = vue.precioPorVoto + " Ether";
+                });
+                web3.eth.getBalance(contractInstance.address, function(error, result) {
+                    let balance = web3.fromWei(result.toString());
+                    vue.tokens[4].valor = balance + " Ether";
+                });
+            });
+        },
+        votosDelUsuarioActual(){
+            let vue = this;
+            this.votacion.deployed().then(function(contractInstance) {
+                // Llamar la funcion 'detallesDelVotante' con el address del votante actual
+                contractInstance.detallesVotante.call(web3.eth.accounts[0]).then(function(result) {
+                    // Actualizar la variable de votos restantes
+                    vue.votosDelUsuario = parseInt(result[1]);
+                });
+            });
+        },
+    },
+    mounted(){
+        // Aqui es donde instanciamos el contrato de votacion
+        this.votacion = contract(contracto_votacion);
+        if(typeof web3 !== 'undefined'){
+            console.warn("Web3 detectado, se esta utilizando Metamask");
+            // Como si se esta usando el provedor Mist/MetaMask
+            window.web3 = new Web3(web3.currentProvider);
+        } else {
+            console.warn("No detectamos web3. Favor de usar chrome e installar MetaMask");
+            alert("No detectamos web3. Favor de usar chrome e installar MetaMask");
+        }
+        // Ligamos votacion con el provedor
+        this.votacion.setProvider(web3.currentProvider);
+        // Llenar la table de los candidatos y el select
+        this.agregarCandidatos();
+        // Llenar la tabla con 'Tokens de Votacion' con la informacion
+        this.agregarInfoTokens();
+        // Obtener 'votosDelUsuario'
+        this.votosDelUsuarioActual();
     }
 }
 </script>
