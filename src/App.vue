@@ -173,6 +173,46 @@ export default {
         }
     },
     methods: {
+        votar(){
+            let vue = this;
+            this.votacion.deployed().then(function(contractInstance) {
+                contractInstance.votarPorCandidato(vue.candidatoSeleccionado,
+                        parseInt(vue.tokensVotar), {gas: 140000, from: web3.eth.accounts[0]}).then(function() {
+
+                    let votosAnteriores = parseInt(vue.candidatos[vue.candidatoSeleccionado].votos);
+                    let votosRecienUsados = parseInt(vue.tokensVotar);
+                    // Actualizar la tabla de los candidatos
+                    vue.candidatos[vue.candidatoSeleccionado].votos = votosAnteriores + votosRecienUsados;
+                    // Actualizar votos que poseo
+                    vue.votosDelUsuario -= parseInt(vue.tokensVotar);
+                    // Resetear el text donde pones los votos que quieres utilizar
+                    vue.tokensVotar = "";
+                });
+            });
+        },
+        comprar(){
+            let vue = this;
+            this.votacion.deployed().then(function(contractInstance) {
+                let contrato = contractInstance;
+                let precio = vue.votosComprar * vue.precioPorVoto;
+                // Llamar la funcion comprar
+                contrato.comprar({value: web3.toWei(precio, 'ether'), from: web3.eth.accounts[0]}).then(function(){
+                    // Actualizar Total Votos Disponibles
+                    vue.tokens[1].valor = parseInt(vue.tokens[1].valor) - parseInt(vue.votosComprar);
+                    // Actualizar Total Votos Vendidos
+                    vue.tokens[2].valor = parseInt(vue.tokens[2].valor) + parseInt(vue.votosComprar);
+                    // Actualizar Total Dinero Recolectado
+                    web3.eth.getBalance(contrato.address, function(error, result){
+                        let balance = web3.fromWei(result.toString());
+                        vue.tokens[4].valor = balance + " Ether";
+                    });
+
+                    // Actualizar el total de votos que le quadan sin utilizar al usuario
+                    vue.votosDelUsuario += parseInt(vue.votosComprar);
+                    vue.votosComprar = "";
+                })
+            });
+        },
         agregarCandidatos() {
             let vue = this;
             this.votacion.deployed().then(function(contractInstance) {
@@ -222,6 +262,28 @@ export default {
                 web3.eth.getBalance(contractInstance.address, function(error, result) {
                     let balance = web3.fromWei(result.toString());
                     vue.tokens[4].valor = balance + " Ether";
+                });
+            });
+        },
+        obtenerDetalles() {
+            let vue = this;
+            this.votacion.deployed().then(function(contractInstance) {
+                contractInstance.detallesVotante.call(vue.codigoVotanteABuscar).then(function(result) {
+                    try {
+                        /* Llena la tabla con los candidatos por los cuales voto,
+                         * el votante de ese address.
+                         */
+                        for(let i=0; i < vue.detallesCandidatos.length; i++) {
+                            vue.detallesCandidatos[i].votos = result[0][i].c[0];
+                        }
+                        // Votos que le quedan a el votante de ese address
+                        vue.votosDelUsuarioEnDetalle = parseInt(result[1]);
+                        vue.encontroInfo = true;
+                    }catch(err){
+                        // Registra el error en la variable 'encontroInfo' para mostrar el alert
+                        vue.encontroInfo = false;
+                        console.error(err);
+                    }
                 });
             });
         },
